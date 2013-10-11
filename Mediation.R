@@ -93,7 +93,6 @@ sga$lciexp<-exp(sga[,3])
 sga$uciexp<-exp(sga[,4])
 print(sga[,c(1,3,4,6,7,8)], digits=4)
 
-s
 medtable<-as.data.frame(rbind( bmi.pre.cat5[1,], sga.pre.cat5[1,], sleep.pre.cat5[1,], bmi.post.cat5[1,], sga.post.cat5[1,], sleep.post.cat5[1,], bmi.rate.cat5[1,], sga.rate.cat5[1,], sleep.rate.cat5[1,]))
 medtable$resexp<-exp(medtable$results)
 medtable$lciexp<-exp(medtable[,3])
