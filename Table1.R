@@ -1,5 +1,9 @@
 ### TABLE S1
 
+library(mice)
+library(mitools)
+library(survey)
+
 load("cortimpwholesamp.Rdata")
 cortimpwholesamp1<-complete(cortimpwholesamp, action=1, include=FALSE)
 cortimpwholesamp2<-complete(cortimpwholesamp, action=2, include=FALSE)
@@ -14,24 +18,52 @@ cortimpwholesamp10<-complete(cortimpwholesamp, action=10, include=FALSE)
 
 cortimpwholesampten<-list(cortimpwholesamp1, cortimpwholesamp2, cortimpwholesamp3, cortimpwholesamp4, cortimpwholesamp5, cortimpwholesamp6, cortimpwholesamp7, cortimpwholesamp8, cortimpwholesamp9, cortimpwholesamp10)
 
-cortdata <- read.csv("cortisol.csv", header = TRUE)
-cortdata$SampleID<-cortdata$Respondent.ID..without.dash.
 dat7<-list(rep(NA, 10))
 incort<-list(rep(NA, 10))
 incortsamp<-list(rep(NA, 10))
 dat3<-list(rep(NA, 10))
 tot<-list(rep(NA, 10))
+
+#add back in date/time variables
+setwd("/Users/kararudolph/Documents/PhD/NIMH/NCSA/cortisol")
+#get date and time of interview for everyone
+five<-read.csv("nshs_tot_datetime.csv", header=TRUE)
+five$SampleID<-five$SID
+five$t1<-as.character(five$StartDateTime)
+five$t1t<-as.POSIXlt(strptime(five$t1, "%m/%d/%y %I:%M %p"))
+#identify data entry errors
+#cortisol sample too early
+w<-five$t1t
+w$hour2<-ifelse(w$hour<6, w$hour+12, w$hour)
+w$min2<-ifelse(w$min<10, as.character(paste(0, w$min, sep="")), w$min)
+w$time<-as.character(paste (w$hour2, w$min2, sep = ":"))
+five$time<-w$time
+# get the interview time in the right format and have the date match the date of those in the survey subsample
+five$time3<-paste("2002-01-01", five$time)
+five$t1t2<-strptime(five$time3,"%Y-%m-%d %H:%M")
+five$first<-as.POSIXlt(five$t1t2)
+five$begtime<-as.numeric(five$first)
+
+keep2<-c("SampleID", "first", "t1t", "begtime")
+positx.vars<-five[!is.na(five$begtime), keep2]
+
+#and make insample variable
+cortdata <- read.csv("cortisol.csv", header = TRUE)
+cortdata$SampleID<-cortdata$Respondent.ID..without.dash.
+
+
 for(i in 1:10){
-dat7[[i]]<-merge(dat6, cortimpwholesampten[[i]], by="SampleID", all.x=TRUE, all.y=FALSE)
+dat7[[i]]<-merge(positx.vars, cortimpwholesampten[[i]], by="SampleID", all.x=FALSE, all.y=FALSE)
 dat7[[i]]$insample<-ifelse(dat7[[i]]$SampleID %in% cortdata$SampleID, 1, 0)
 incort[[i]]<-dat7[[i]][dat7[[i]]$insample==0,]
-incort[[i]]$first<-incort[[i]]$time2
 incort[[i]]$mage<-incort[[i]]$cmage + 26
 incort[[i]]$parenttrauma<-ifelse(!is.na(incort[[i]]$numparenttrauma) & incort[[i]]$numparenttrauma>2, 1, 0) 
 incort[[i]]$urbanicity[incort[[i]]$urbancat==1]<-2
 incort[[i]]$urbanicity[incort[[i]]$suburb==1]<-1
 incort[[i]]$urbanicity[incort[[i]]$suburb==0 & incort[[i]]$urbancat==0]<-0
 }
+
+##for consistency, we'll use the imputations that we did separately for the cortisol sample
 for(i in 1:10){
 dat2[[i]]$racecat1[dat2[[i]]$racecat==1]<-0
 dat2[[i]]$racecat1[dat2[[i]]$racecat==2]<-1
@@ -40,7 +72,7 @@ dat2[[i]]$racecat1[dat2[[i]]$racecat==4]<-3
 dat2[[i]]$racecat<-dat2[[i]]$racecat1
 }
 
-keep<-c("SampleID" , "Id2", "meducat" , "moth" ,"fath" ,  "urbanicity" ,"age_cent" , "imgen" ,"citizen", "Language",  "SEXF", "pc_pa_severe" , "cinc" ,"racecat" , "tertscore","region" , "mage" ,"currentdruguse", "smoke","oc", "pregnant", "numrx","diabetes","psychmeds" ,"asthmatrt","fathwork" ,"mothwork" , "hrslpwkndnt" , "hrslpwknt", "hrbdwkmod" , "hrbdwkndmod" ,"curremp", "smallgestage" ,"season","weekend", "insample" , "parenttrauma"  ,"first" )
+keep<-c("SampleID" , "Id2", "meducat" , "moth" ,"fath" ,  "urbanicity" ,"age_cent" , "imgen" ,"citizen", "Language",  "SEXF", "pc_pa_severe" , "cinc" ,"racecat" , "tertscore","region" , "mage" ,"currentdruguse", "smoke","oc", "pregnant", "numrx","diabetes","psychmeds" ,"asthmatrt","fathwork" ,"mothwork" , "hrslpwkndnt" , "hrslpwknt", "hrbdwkmod" , "hrbdwkndmod" ,"curremp", "smallgestage" ,"season","weekend", "insample" , "parenttrauma"  ,"begtime" )
 
 for(i in 1:10){
 incortsamp[[i]]<-incort[[i]][keep]
@@ -50,8 +82,6 @@ dat3[[i]]<-dat2[[i]][keep]
 for(i in 1:10){
   tot[[i]]<-rbind(dat3[[i]], incortsamp[[i]])
 }
-
-library(mitools)
 
 dat8<-imputationList(list(tot[[1]], tot[[2]], tot[[3]], tot[[4]], tot[[5]], tot[[6]], tot[[7]], tot[[8]], tot[[9]], tot[[10]]))
 
@@ -68,9 +98,9 @@ ts1<-cbind(c[c(even),],c[c(odd),])
 tabs1<-ts1[,c(1:2, 6:7)]
 xtable(tabs1*100, digits=2)
 
-with(dess1, svyby(~as.numeric(first), ~insample, svymean, keep.var=TRUE, na.rm=TRUE))
+with(dess1, svyby(~begtime, ~insample, svymean, keep.var=TRUE, na.rm=TRUE))
 with(dess1, svychisq(~insample +racecat))
-with(dess1, svyttest(as.numeric(first)~insample))
+with(dess1, svyttest(begtime~insample))
 svychisq(~insample +racecat, data=tot[[1]])
 with(dess1, svyby(~ age_cent + cinc + mage + numrx + hrbdwkmod + hrbdwkndmod + hrslpwknt + hrslpwkndnd, ~insample, svyttest, na.rm=TRUE))
 contvar<-c(3,15:16, 52:56)
@@ -341,8 +371,6 @@ keep<-c("SampleID", "meducat", "moth", "fath", "Id2",
         "psychmeds", "asthmatrt", "fathwork", "mothwork", "hrslpwkndnt", "hrslpwknt", "hrbdwkmod", "hrbdwkndmod", "curremp", "smallgestage", "feet", "inch", "lbs", "season", "weekend")
 keep2<-c("SampleID", "time2")
 dat4<-dat3[keep]
-dat6<-dat3[!is.na(dat3$time2), keep2]
-save(dat4, file="totalImpEffectHet.Rdata")
 
 ## Multiple imputation
 
@@ -401,3 +429,66 @@ densityplot(cortimpwholesamp, ~ lbs+ meducat + moth+  fath + CH33+  imgen)
 
 #stripplot(cortimp)
 save(cortimpwholesamp, file="cortimpwholesamp.Rdata")
+
+load("cortisolraw.Rdata")
+load("cortimphundred.Rdata")
+positx.vars<-d[,c("SampleID", "first", "second", "date1")]
+tmp.excl<-list(rep(NA, 10))
+tmp2.excl<-list(rep(NA, 10))
+imp.exclcat1<-list(rep(NA, 10))
+imp.exclcat2<-list(rep(NA, 10))
+imp.exclcat3<-list(rep(NA, 10))
+imp.exclcat4<-list(rep(NA, 10))
+for(i in 1:10){
+tmp.excl[[i]]<-merge(cortimphundred[[i]], positx.vars, by="SampleID", all.x=TRUE, all.y=FALSE) }
+for(i in 1:10){
+	tmp.excl[[i]]$schyr<-ifelse(with(tmp.excl[[i]], date1$mo==6 | date1$mo==7 | date1$mo==8), 0, 1 )
+}
+
+for(i in 1:10){
+tmp.excl[[i]]$late<-ifelse(tmp.excl[[i]]$schyr==0 | tmp.excl[[i]]$weekend==1, 1, 0)}
+for(i in 1:10){
+tmp.excl[[i]]$wm[tmp.excl[[i]]$late==0 & with(tmp.excl[[i]], first$hour<5 | first$hour>9 )]<-1
+tmp.excl[[i]]$wm[tmp.excl[[i]]$late==1 & with(tmp.excl[[i]], first$hour<7 | first$hour>11 )]<-1 } 
+
+for(i in 1:10){
+tmp2.excl[[i]]<-tmp.excl[[i]][!is.na(tmp.excl[[i]]$wm) & tmp.excl[[i]]$wm==1,]}
+
+
+dat1<-list(rep(NA,10))
+dat2<-list(rep(NA, 10))
+for(i in 1:10){
+  tmp.excl[[i]]$wm<-ifelse(is.na(tmp.excl[[i]]$wm), 0,1)
+  dat1[[i]]<-merge(tmp.excl[[i]], tmp1,  by="SampleID", all.x=TRUE, all.y=FALSE)
+  dat2[[i]]<-merge(dat1[[i]], tmp2,  by="SampleID", all.x=TRUE, all.y=FALSE)
+}
+
+for(i in 1:10){
+  dat2[[i]]$hrbdwkmod<-ifelse(dat2[[i]]$hrbdwk>18, dat2[[i]]$hrbdwk - 24, dat2[[i]]$hrbdwk)
+  dat2[[i]]$hrbdwkndmod<-ifelse(dat2[[i]]$hrbdwknd>18, dat2[[i]]$hrbdwknd - 24, dat2[[i]]$hrbdwknd)
+dat2[[i]]$currentdruguse<-ifelse(dat2[[i]]$SU48a<4 | dat2[[i]]$SU48b<4 | dat2[[i]]$SU48c<4 | dat2[[i]]$SU48d<4, 1, 0)
+dat2[[i]]$currentdruguse<-ifelse(is.na(dat2[[i]]$currentdruguse), 0, dat2[[i]]$currentdruguse)
+dat2[[i]]$currentdruguse<-ifelse(dat2[[i]]$SU48a<4 | dat2[[i]]$SU48b<4 | dat2[[i]]$SU48c<4 | dat2[[i]]$SU48d<4, 1, 0)
+dat2[[i]]$currentdruguse<-ifelse(is.na(dat2[[i]]$currentdruguse), 0, dat2[[i]]$currentdruguse)
+
+#find those who had parents who misused substances
+dat2[[i]]$mometohmisuse<-ifelse(dat2[[i]]$CH63==1, 1, 0)
+dat2[[i]]$momdrgmisuse<-ifelse(dat2[[i]]$CH63_1==1, 1, 0)
+dat2[[i]]$momarrstprison<-ifelse(dat2[[i]]$CH72==1, 1, 0)
+dat2[[i]]$momsuicideattmpt<-ifelse(dat2[[i]]$CH74==1, 1, 0)
+dat2[[i]]$dadetohmisuse<-ifelse(dat2[[i]]$CH92==1,1,0)
+dat2[[i]]$daddrgisuse<-ifelse(dat2[[i]]$CH92_1==1,1,0)
+dat2[[i]]$dadarrstprison<-ifelse(dat2[[i]]$CH101==1,1,0)
+dat2[[i]]$dadsuicideattmpt<-ifelse(dat2[[i]]$CH103==1,1,0)
+dat2[[i]]$parentsubmisuse<-ifelse(dat2[[i]]$momdrgmisuse==1 | dat2[[i]]$mometohmisuse==1 | dat2[[i]]$dadetohmisuse==1 | dat2[[i]]$daddrgisuse==1, 1, 0)
+dat2[[i]]$parentsuicideattmpt<-ifelse(dat2[[i]]$momsuicideattmpt==1 | dat2[[i]]$dadsuicideattmpt==1, 1, 0)
+dat2[[i]]$parentarrstprison<-ifelse(dat2[[i]]$momarrstprison==1 | dat2[[i]]$dadarrstprison==1,1,0)
+dat2[[i]]$numparenttrauma<-dat2[[i]]$mometohmisuse + dat2[[i]]$momdrgmisuse + dat2[[i]]$momarrstprison + dat2[[i]]$momsuicideattmpt + dat2[[i]]$dadetohmisuse + dat2[[i]]$daddrgisuse +dat2[[i]]$dadarrstprison + dat2[[i]]$dadsuicideattmpt
+dat2[[i]]$parenttrauma<-ifelse(!is.na(dat2[[i]]$numparenttrauma) & dat2[[i]]$numparenttrauma>2, 1, 0) 
+dat2[[i]]$insample<-1 
+dat2[[i]]$urbanicity[dat2[[i]]$urbancat==1]<-2
+dat2[[i]]$urbanicity[dat2[[i]]$suburb==1]<-1
+dat2[[i]]$urbanicity[dat2[[i]]$suburb==0 & dat2[[i]]$urbancat==0]<-0
+dat2[[i]]$begtime<-as.numeric(dat2[[i]]$first)
+}
+

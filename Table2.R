@@ -24,9 +24,9 @@ ts1<-cbind(c[c(odd),],c[c(even),])
 tabs1<-ts1[,c(1:2, 6:7)]
 xtable(tabs1*100, digits=2)
 
-with(dess1, svyby(~as.numeric(first), ~wm, svymean, keep.var=TRUE, na.rm=TRUE))
+with(dess1, svyby(~begtime, ~wm, svymean, keep.var=TRUE, na.rm=TRUE))
 
-with(dess1, svyttest(as.numeric(first)~wm))
+with(dess1, svyttest(begtime~wm))
 
 contvar<-c(3,15:16, 52:56)
 p<-NULL
